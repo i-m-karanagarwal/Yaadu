@@ -1,0 +1,9 @@
+node_modules
+.next
+.env.local
+.env
+deploy-*.json
+_mcp_*.json
+scripts/temp-deploy.js
+app/fonts
+YaaduSpec.md

@@ -1,16 +1,15 @@
 import type { Metadata } from "next";
-import localFont from "next/font/local";
+import { Outfit, Source_Serif_4 } from "next/font/google";
 import "./globals.css";
 
-const geistSans = localFont({
-  src: "./fonts/GeistVF.woff",
+const outfit = Outfit({
+  subsets: ["latin"],
   variable: "--font-geist-sans",
-  weight: "100 900",
 });
-const geistMono = localFont({
-  src: "./fonts/GeistMonoVF.woff",
+
+const sourceSerif = Source_Serif_4({
+  subsets: ["latin"],
   variable: "--font-geist-mono",
-  weight: "100 900",
 });
 
 export const metadata: Metadata = {
@@ -26,7 +25,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-stone-50 font-sans antialiased text-stone-900`}
+        className={`${outfit.variable} ${sourceSerif.variable} min-h-screen bg-stone-50 font-sans antialiased text-stone-900`}
       >
         {children}
       </body>

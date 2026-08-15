@@ -32,8 +32,15 @@ yarn-error.log*
 
 # vercel
 .vercel
+.vercel-token.tmp
+scripts/temp-deploy.js
+scripts/set-vercel-env.js
+deploy-*.json
+_mcp_*.json
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
 node_modules
+
+.vercel
