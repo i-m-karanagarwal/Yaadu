@@ -1,0 +1,17 @@
+{
+  "name": "Yaadu",
+  "install": ".cursor/scripts/install.sh",
+  "ports": [
+    {
+      "name": "Next.js dev server",
+      "port": 3000
+    }
+  ],
+  "terminals": [
+    {
+      "name": "dev",
+      "command": "npm run dev",
+      "description": "Next.js development server on http://localhost:3000"
+    }
+  ]
+}
