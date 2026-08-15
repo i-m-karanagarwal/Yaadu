@@ -1,4 +1,13 @@
-import type { ParsedBill, Recurrence } from "./types";
+import type {
+  IntentType,
+  ParsedBill,
+  ParsedReminder,
+  ParsedShopping,
+  ParsedShoppingItem,
+  Recurrence,
+  ReminderKind,
+  ShoppingCategory,
+} from "./types";
 
 /**
  * NVIDIA NIM (hosted) — OpenAI-compatible Chat Completions.
@@ -40,8 +49,16 @@ Rules:
 - Do not invent fields. Do not wrap the JSON in markdown.`;
 
 const VALID_RECURRENCE: Recurrence[] = ["one-time", "monthly", "weekly", "yearly"];
+const VALID_INTENTS: IntentType[] = ["bill", "shopping", "reminder"];
+const VALID_SHOPPING_CATEGORIES: ShoppingCategory[] = [
+  "ration",
+  "fresh",
+  "household",
+  "other",
+];
+const VALID_REMINDER_KINDS: ReminderKind[] = ["birthday", "task", "event", "other"];
 
-export async function parseBillText(rawText: string): Promise<ParsedBill> {
+async function callNim(systemPrompt: string, userText: string): Promise<string> {
   const apiKey = process.env.NVIDIA_API_KEY;
   if (!apiKey) {
     throw new Error("NVIDIA_API_KEY is not set");
@@ -59,10 +76,9 @@ export async function parseBillText(rawText: string): Promise<ParsedBill> {
       model,
       temperature: 0.1,
       max_tokens: 512,
-      // Some free NIM models reject response_format; prompt already requires raw JSON.
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: `User input:\n${rawText}` },
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `User input:\n${userText}` },
       ],
     }),
   });
@@ -82,7 +98,90 @@ export async function parseBillText(rawText: string): Promise<ParsedBill> {
     throw new Error("NVIDIA NIM returned an empty response");
   }
 
-  return normalizeParsed(JSON.parse(stripFences(text)));
+  return stripFences(text);
+}
+
+const CLASSIFY_PROMPT = `You classify Indian household voice/text commands into one intent.
+User may write Hindi, English, or Hinglish.
+
+Respond with ONLY JSON:
+{ "intent": "bill" | "shopping" | "reminder" }
+
+Rules:
+- "bill" — recurring payments, utilities, rent, subscriptions, LPG booking, insurance premiums
+- "shopping" — buy groceries, ration, milk, vegetables, household supplies, "lena hai", "khatam ho gaya", shopping lists
+- "reminder" — birthdays, festivals, tasks, events, "yaad dila dena" for non-bill things, appointments, gift reminders
+- If both bill and reminder, prefer "bill" when money/payment is central
+- No markdown fences`;
+
+const SHOPPING_PROMPT = `Extract shopping list items from Indian household grocery commands.
+User may write Hindi, English, or Hinglish.
+
+Respond with ONLY JSON:
+{
+  "items": [
+    { "name": string, "category": "ration" | "fresh" | "household" | "other", "quantity": string | null }
+  ],
+  "listName": string | null
+}
+
+Categories:
+- ration: atta, rice, dal, oil, sugar, salt, spices
+- fresh: milk, vegetables, fruits, bread, eggs, doodh
+- household: detergent, dishwash, cleaners, tissues, soap
+- other: anything else
+
+Rules:
+- Split multiple items into separate entries
+- quantity as spoken ("2 kg", "1 packet") or null
+- listName only if a specific list is named; otherwise null
+- No markdown fences`;
+
+const REMINDER_PROMPT = `Extract reminder/event data from Indian household commands.
+User may write Hindi, English, or Hinglish.
+
+Respond with ONLY JSON:
+{
+  "kind": "birthday" | "task" | "event" | "other",
+  "title": string,
+  "person": string | null,
+  "dueDate": string | null,
+  "recurrence": "one-time" | "monthly" | "weekly" | "yearly" | null,
+  "reminderDaysBefore": number | null,
+  "assignedRole": string | null
+}
+
+Rules:
+- title: short English summary
+- person: named person if mentioned (Mummy, Papa, Karan)
+- dueDate: YYYY-MM-DD when a date is clearly stated
+- assignedRole: household role to remind (Papa, Mummy) if mentioned
+- birthday → kind "birthday", recurrence "yearly", reminderDaysBefore 7 if not stated
+- Default reminderDaysBefore to 2 for tasks, 7 for birthdays
+- No markdown fences`;
+
+export async function classifyIntent(rawText: string): Promise<IntentType> {
+  const text = await callNim(CLASSIFY_PROMPT, rawText);
+  const raw = JSON.parse(text) as { intent?: string };
+  if (VALID_INTENTS.includes(raw.intent as IntentType)) {
+    return raw.intent as IntentType;
+  }
+  return "bill";
+}
+
+export async function parseShoppingText(rawText: string): Promise<ParsedShopping> {
+  const text = await callNim(SHOPPING_PROMPT, rawText);
+  return normalizeShopping(JSON.parse(text));
+}
+
+export async function parseReminderText(rawText: string): Promise<ParsedReminder> {
+  const text = await callNim(REMINDER_PROMPT, rawText);
+  return normalizeReminder(JSON.parse(text));
+}
+
+export async function parseBillText(rawText: string): Promise<ParsedBill> {
+  const text = await callNim(SYSTEM_PROMPT, rawText);
+  return normalizeParsed(JSON.parse(text));
 }
 
 function stripFences(text: string): string {
@@ -119,5 +218,91 @@ function normalizeParsed(raw: Record<string, unknown>): ParsedBill {
     recurrence,
     dayOfMonth,
     dueDate,
+  };
+}
+
+function normalizeShopping(raw: Record<string, unknown>): ParsedShopping {
+  const itemsRaw = Array.isArray(raw.items) ? raw.items : [];
+  const items: ParsedShoppingItem[] = itemsRaw
+    .map((entry) => {
+      const e = entry as Record<string, unknown>;
+      const category = VALID_SHOPPING_CATEGORIES.includes(
+        e.category as ShoppingCategory
+      )
+        ? (e.category as ShoppingCategory)
+        : "other";
+      return {
+        name: String(e.name || "").trim(),
+        category,
+        quantity:
+          typeof e.quantity === "string" && e.quantity.trim()
+            ? e.quantity.trim()
+            : null,
+      };
+    })
+    .filter((i) => i.name.length > 0);
+
+  if (items.length === 0) {
+    items.push({ name: "Item", category: "other", quantity: null });
+  }
+
+  return {
+    items,
+    listName:
+      typeof raw.listName === "string" && raw.listName.trim()
+        ? raw.listName.trim()
+        : null,
+  };
+}
+
+function normalizeReminder(raw: Record<string, unknown>): ParsedReminder {
+  const kind = VALID_REMINDER_KINDS.includes(raw.kind as ReminderKind)
+    ? (raw.kind as ReminderKind)
+    : "other";
+
+  let recurrence: Recurrence | null = null;
+  if (VALID_RECURRENCE.includes(raw.recurrence as Recurrence)) {
+    recurrence = raw.recurrence as Recurrence;
+  } else if (kind === "birthday") {
+    recurrence = "yearly";
+  }
+
+  let dueDate: string | null = null;
+  if (typeof raw.dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw.dueDate)) {
+    dueDate = raw.dueDate;
+  }
+
+  let reminderDaysBefore: number | null = null;
+  if (
+    typeof raw.reminderDaysBefore === "number" &&
+    Number.isFinite(raw.reminderDaysBefore)
+  ) {
+    reminderDaysBefore = Math.max(0, Math.floor(raw.reminderDaysBefore));
+  } else if (kind === "birthday") {
+    reminderDaysBefore = 7;
+  } else {
+    reminderDaysBefore = 2;
+  }
+
+  const person =
+    typeof raw.person === "string" && raw.person.trim() ? raw.person.trim() : null;
+  const assignedRole =
+    typeof raw.assignedRole === "string" && raw.assignedRole.trim()
+      ? raw.assignedRole.trim()
+      : null;
+
+  const titleBase = String(raw.title || "").trim();
+  const title =
+    titleBase ||
+    (kind === "birthday" && person ? `${person}'s birthday` : "Reminder");
+
+  return {
+    kind,
+    title,
+    person,
+    dueDate,
+    recurrence,
+    reminderDaysBefore,
+    assignedRole,
   };
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getBillsCollection } from "@/lib/db";
+import { getHouseholdContext } from "@/lib/household";
 import type { BillDocument } from "@/lib/bill-document";
 import {
   computeInitialDueDate,
@@ -10,12 +11,18 @@ import type { ConfirmBillInput, Recurrence } from "@/lib/types";
 
 export async function GET(request: Request) {
   try {
+    const ctx = await getHouseholdContext();
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
     const category = searchParams.get("category");
 
     const collection = await getBillsCollection();
-    const filter: Record<string, unknown> = {};
+    const filter: Record<string, unknown> = {
+      $or: [
+        { householdId: ctx.householdId },
+        { householdId: { $exists: false } },
+      ],
+    };
     if (status) filter.status = status;
     if (category) filter.category = category;
 
@@ -39,6 +46,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const ctx = await getHouseholdContext();
     const body = (await request.json()) as ConfirmBillInput;
     if (!body?.item || !body?.rawText) {
       return NextResponse.json(
@@ -58,6 +66,7 @@ export async function POST(request: Request) {
     });
 
     const bill: BillDocument = {
+      householdId: ctx.householdId,
       rawText: body.rawText,
       item: body.item.trim(),
       category: (body.category || "Other").trim(),

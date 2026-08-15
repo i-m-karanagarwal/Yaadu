@@ -4,6 +4,7 @@ import type { BillHistoryEntry, BillStatus, Recurrence } from "./types";
 /** Document shape stored in MongoDB `bills` collection. */
 export interface BillDocument {
   _id?: ObjectId;
+  householdId?: ObjectId;
   rawText: string;
   item: string;
   category: string;

@@ -7,9 +7,10 @@ import { daysUntil, formatRecurrence } from "@/lib/recurrence";
 type Props = {
   bills: Bill[];
   onChanged: () => void;
+  compact?: boolean;
 };
 
-export default function BillList({ bills, onChanged }: Props) {
+export default function BillList({ bills, onChanged, compact = false }: Props) {
   const [category, setCategory] = useState("all");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Bill | null>(null);
@@ -101,6 +102,23 @@ export default function BillList({ bills, onChanged }: Props) {
     } finally {
       setBusyId(null);
     }
+  }
+
+  if (compact) {
+    return (
+      <ul className="mt-2 space-y-2">
+        {bills.map((bill) => (
+          <BillCard
+            key={bill._id}
+            bill={bill}
+            busy={busyId === bill._id}
+            onPaid={() => bill._id && markPaid(bill._id)}
+            onEdit={() => setEditing(bill)}
+            onDelete={() => bill._id && remove(bill._id)}
+          />
+        ))}
+      </ul>
+    );
   }
 
   return (

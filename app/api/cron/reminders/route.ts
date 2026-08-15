@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { getBillsCollection } from "@/lib/db";
+import { getBillsCollection, getRemindersCollection } from "@/lib/db";
 import {
   isWithinReminderWindow,
   statusForDueDate,
   todayISO,
 } from "@/lib/recurrence";
-import { sendReminderEmail } from "@/lib/resend";
-import type { Bill } from "@/lib/types";
+import { sendHouseholdReminderEmail } from "@/lib/resend";
+import type { Bill, Reminder } from "@/lib/types";
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -43,13 +43,26 @@ export async function GET(request: Request) {
         isWithinReminderWindow(b.nextDueDate, b.reminderDaysBefore ?? 2, today)
     );
 
+    const remindersCol = await getRemindersCollection();
+    const activeReminders = await remindersCol
+      .find({ status: "active" })
+      .toArray();
+
+    const remindersDue = activeReminders.filter((r) =>
+      isWithinReminderWindow(r.dueDate, r.reminderDaysBefore ?? 2, today)
+    );
+
     let emailId: string | undefined;
-    if (dueForReminder.length > 0) {
+    if (dueForReminder.length > 0 || remindersDue.length > 0) {
       const asBills: Bill[] = dueForReminder.map((b) => ({
         ...b,
         _id: b._id?.toString(),
       }));
-      const result = await sendReminderEmail(asBills);
+      const asReminders: Reminder[] = remindersDue.map((r) => ({
+        ...r,
+        _id: r._id!.toString(),
+      }));
+      const result = await sendHouseholdReminderEmail(asBills, asReminders);
       emailId = result.id;
     }
 
@@ -58,7 +71,8 @@ export async function GET(request: Request) {
       today,
       checked: active.length,
       markedOverdue,
-      reminded: dueForReminder.length,
+      billReminders: dueForReminder.length,
+      reminderAlerts: remindersDue.length,
       emailId: emailId ?? null,
     });
   } catch (err) {

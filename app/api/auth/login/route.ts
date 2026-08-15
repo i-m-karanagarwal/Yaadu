@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { AUTH_COOKIE } from "@/lib/auth";
+import { AUTH_COOKIE, HOUSEHOLD_COOKIE } from "@/lib/auth";
+import { ensureDefaultHousehold } from "@/lib/household";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
@@ -17,13 +18,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Wrong passcode" }, { status: 401 });
   }
 
-  const response = NextResponse.json({ ok: true });
+  const ctx = await ensureDefaultHousehold();
+
+  const response = NextResponse.json({
+    ok: true,
+    household: ctx.household,
+    members: ctx.members,
+  });
   response.cookies.set(AUTH_COOKIE, passcode, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 24 * 90,
+  });
+  response.cookies.set(HOUSEHOLD_COOKIE, ctx.householdId.toString(), {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
   });
   return response;
 }

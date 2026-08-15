@@ -1,5 +1,5 @@
 import { Resend } from "resend";
-import type { Bill } from "./types";
+import type { Bill, Reminder } from "./types";
 import { daysUntil, formatRecurrence } from "./recurrence";
 
 function getResend(): Resend {
@@ -29,31 +29,39 @@ function lineForBill(bill: Bill): string {
   return `• ${bill.item}${formatAmount(bill.amount)} — ${when}, on ${bill.nextDueDate} (${formatRecurrence(bill.recurrence, bill.dayOfMonth)})`;
 }
 
-export async function sendReminderEmail(bills: Bill[]): Promise<{ id?: string }> {
+export async function sendHouseholdReminderEmail(
+  bills: Bill[],
+  reminders: Reminder[]
+): Promise<{ id?: string }> {
   const to = process.env.NOTIFY_EMAIL;
   if (!to) {
     throw new Error("NOTIFY_EMAIL is not set");
   }
 
   const resend = getResend();
+  const total = bills.length + reminders.length;
   const subject =
-    bills.length === 1
-      ? `Yaadu: ${bills[0].item} reminder`
-      : `Yaadu: ${bills.length} bills need your attention`;
+    total === 1
+      ? `Yaadu: ${bills[0]?.item || reminders[0]?.title} reminder`
+      : `Yaadu: ${total} things need your attention`;
 
-  const body = [
-    "Yaadu reminder — bills coming up:",
-    "",
-    ...bills.map(lineForBill),
-    "",
-    "Open Yaadu to mark them paid when you're done.",
-  ].join("\n");
+  const lines: string[] = ["Yaadu reminder —", ""];
+
+  if (bills.length > 0) {
+    lines.push("Bills:", ...bills.map(lineForBill), "");
+  }
+
+  if (reminders.length > 0) {
+    lines.push("Reminders:", ...reminders.map(lineForReminder), "");
+  }
+
+  lines.push("Open Yaadu to review and mark done.");
 
   const { data, error } = await resend.emails.send({
     from: "Yaadu <onboarding@resend.dev>",
     to: [to],
     subject,
-    text: body,
+    text: lines.join("\n"),
   });
 
   if (error) {
@@ -61,4 +69,27 @@ export async function sendReminderEmail(bills: Bill[]): Promise<{ id?: string }>
   }
 
   return { id: data?.id };
+}
+
+/** @deprecated Use sendHouseholdReminderEmail */
+export async function sendReminderEmail(bills: Bill[]): Promise<{ id?: string }> {
+  return sendHouseholdReminderEmail(bills, []);
+}
+
+function lineForReminder(reminder: Reminder): string {
+  const days = daysUntil(reminder.dueDate);
+  const when =
+    days === 0
+      ? "today"
+      : days === 1
+        ? "tomorrow"
+        : days > 1
+          ? `in ${days} days`
+          : `${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} ago`;
+
+  const who = reminder.person ? ` (${reminder.person})` : "";
+  const assign =
+    reminder.assignedRole ? ` → remind ${reminder.assignedRole}` : "";
+
+  return `• ${reminder.title}${who} — ${when}, on ${reminder.dueDate}${assign}`;
 }

@@ -1,5 +1,11 @@
-import { MongoClient, Db, Collection } from "mongodb";
+import { MongoClient, Db, Collection, ObjectId } from "mongodb";
 import type { BillDocument } from "./bill-document";
+import type { HouseholdDocument, MemberDocument } from "./household-document";
+import type { ReminderDocument } from "./reminder-document";
+import type {
+  ShoppingItemDocument,
+  ShoppingListDocument,
+} from "./shopping-document";
 
 /**
  * Serverless (Vercel) MongoDB client.
@@ -40,4 +46,41 @@ export async function getDb(): Promise<Db> {
 export async function getBillsCollection(): Promise<Collection<BillDocument>> {
   const db = await getDb();
   return db.collection<BillDocument>("bills");
+}
+
+export async function getHouseholdsCollection(): Promise<
+  Collection<HouseholdDocument>
+> {
+  const db = await getDb();
+  return db.collection<HouseholdDocument>("households");
+}
+
+export async function getMembersCollection(): Promise<Collection<MemberDocument>> {
+  const db = await getDb();
+  return db.collection<MemberDocument>("members");
+}
+
+export async function getShoppingListsCollection(): Promise<
+  Collection<ShoppingListDocument>
+> {
+  const db = await getDb();
+  return db.collection<ShoppingListDocument>("shopping_lists");
+}
+
+export async function getShoppingItemsCollection(): Promise<
+  Collection<ShoppingItemDocument>
+> {
+  const db = await getDb();
+  return db.collection<ShoppingItemDocument>("shopping_items");
+}
+
+export async function getRemindersCollection(): Promise<
+  Collection<ReminderDocument>
+> {
+  const db = await getDb();
+  return db.collection<ReminderDocument>("reminders");
+}
+
+export function toObjectId(id: string): ObjectId {
+  return new ObjectId(id);
 }

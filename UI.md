@@ -1,8 +1,12 @@
-# Yaadu — Build Spec (Hinglish Bill Reminder MVP)
+# Yaadu — Bills wedge mobile UI
 
-> **Product vision & roadmap:** [`HouseholdOS.md`](HouseholdOS.md) · **Mobile UI:** [`UI.md`](UI.md)
+> Engineering spec: [`YaaduSpec.md`](YaaduSpec.md) · Product vision: [`HouseholdOS.md`](HouseholdOS.md)
 
-## 1. What this is
+This document covers **mobile-first UI patterns** for the bills wedge only. It does not duplicate the full build spec — see YaaduSpec for API routes, data model, and env vars.
+
+---
+
+## 1. What this is (summary)
 
 The wedge feature from the household OS idea, built alone and built well: you type a bill in plain Hindi, English, or Hinglish — "Bijli ka bill har mahine 10 tareekh ko aata hai, ₹2000 ke aas paas" — and Yaadu turns that into a structured, recurring reminder that actually fires on time. No WhatsApp integration in v1, no document OCR, no multi-user household setup. One person, one login, one job done well: never miss a bill.
 
@@ -150,7 +154,31 @@ yaadu/
 
 ---
 
-## 9. Explicitly out of scope for v1
+## 9. Mobile UI spec
+
+Three core screens, designed mobile-first (this is the whole point — it should feel usable one-thumb, on the move).
+
+### 9.1 Home / dashboard
+- Add-bill input pinned at the very top, above all lists — since typing a bill is the core product action, it should never be a step away.
+- **Overdue** section, visually distinct (warm/danger accent), shown above Upcoming whenever it's non-empty — a late bill should never require scrolling to find.
+- **Upcoming** section: each row is an icon (mapped by category — bolt for electricity, wifi for internet, flame for LPG, home for rent, etc.), item name, due-date phrased in relative terms ("Due in 2 days, on the 10th"), and amount right-aligned.
+- Bottom nav: Home, All bills, Settings. Resist adding more tabs until the core loop is proven.
+
+### 9.2 Confirm parsed bill
+- Shown immediately after the user submits free text and Gemini returns structured data — never save silently.
+- The original typed text stays visible at the top (small, italic, muted) so the user can sanity-check the parse against what they actually said.
+- All fields editable inline: item (text), category (dropdown), amount (number), day of month (number), recurrence (dropdown: one-time / weekly / monthly / yearly).
+- Two actions at the bottom: "Cancel" (discard) and "Save bill" (primary, commits to MongoDB and computes `nextDueDate`).
+
+### 9.3 All bills
+- Filter chips at the top (All, plus one per category) — horizontally scrollable, not wrapped, to keep it to one row on a narrow screen.
+- Grouped by status: "Paid this cycle" first (dimmed, strikethrough — visible so the user gets the satisfaction of a cleared bill, not hidden away), then "Upcoming."
+- Each row: category icon, item name, due day + recurrence ("Due 10th, monthly"), amount.
+- Tapping any row opens it for editing (reuses the confirm-screen layout, pre-filled).
+
+---
+
+## 10. Explicitly out of scope for v1
 
 - WhatsApp integration (add once the core loop is proven).
 - Multi-user households / shared access.
@@ -160,7 +188,7 @@ yaadu/
 
 ---
 
-## 10. Build order (give Cursor one step at a time)
+## 11. Build order (give Cursor one step at a time)
 
 1. Scaffold Next.js + MongoDB connection, confirm read/write works.
 2. Build the passcode login + middleware.
